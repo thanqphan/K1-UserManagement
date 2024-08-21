@@ -63,7 +63,8 @@ builder.Services.AddIdentityServer()
     .AddInMemoryApiScopes(Config.GetApiScopes())
     .AddInMemoryApiResources(Config.GetApiResources())
     .AddInMemoryClients(Config.GetClients())
-    .AddInMemoryIdentityResources(Config.GetIdentityResources());
+    .AddInMemoryIdentityResources(Config.GetIdentityResources())
+    .AddProfileService<CustomProfileService>(); // Add this line
 
 builder.Services.AddAuthentication(options =>
 {
@@ -84,15 +85,25 @@ builder.Services.AddAuthentication(options =>
         OnTokenValidated = async context =>
         {
             var userManager = context.HttpContext.RequestServices.GetRequiredService<UserManager<User>>();
-            var user = await userManager.FindByNameAsync("thangpa");
-            var roles = await userManager.GetRolesAsync(user);
+            var userName = context.Principal.Identity.Name;
 
-            var claims = roles.Select(role => new Claim(ClaimTypes.Role, role));
-            var appIdentity = new ClaimsIdentity(claims);
+            if (!string.IsNullOrEmpty(userName))
+            {
+                var user = await userManager.FindByNameAsync(userName);
 
-            context.Principal.AddIdentity(appIdentity);
+                if (user != null)
+                {
+                    var roles = await userManager.GetRolesAsync(user);
+
+                    var claims = roles.Select(role => new Claim(ClaimTypes.Role, role)).ToArray();
+                    var appIdentity = new ClaimsIdentity(claims);
+
+                    context.Principal.AddIdentity(appIdentity);
+                }
+            }
         }
     };
+
 
 });
 
@@ -114,14 +125,10 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseIdentityServer();
-
 app.UseHttpsRedirection();
-
 app.UseAuthentication();
-
 app.UseAuthorization();
-
+app.UseIdentityServer();
 app.MapControllers();
 
 // Seed the database with initial data
