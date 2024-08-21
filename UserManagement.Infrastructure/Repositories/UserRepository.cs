@@ -48,7 +48,7 @@ namespace UserManagement.Infrastructure.Repositories
 
         public async Task<User> GetUserByUsernameAsync(string username)
         {
-            return await _context.Users.FirstOrDefaultAsync(x => x.Username == username);
+            return await _context.Users.FirstOrDefaultAsync(x => x.UserName == username);
         }
 
         public async Task UpdateUserAsync(User user)

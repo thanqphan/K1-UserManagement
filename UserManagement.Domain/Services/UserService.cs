@@ -1,4 +1,5 @@
 ﻿using AutoMapper;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using UserManagement.Core.Entities;
 using UserManagement.Core.Extensions;
@@ -14,10 +15,12 @@ namespace UserManagement.Domain.Services
     {
         private readonly IUserRepository _userRepository;
         private readonly IMapper _mapper;
-        public UserService(IUserRepository userRepository, IMapper mapper)
+        private readonly UserManager<User> _userManager;
+        public UserService(IUserRepository userRepository, IMapper mapper, UserManager<User> userManager)
         {
             _userRepository = userRepository;
             _mapper = mapper;
+            _userManager = userManager;
         }
 
         public async Task ChangePasswordAsync(ChangePasswordRequest request)
@@ -25,18 +28,15 @@ namespace UserManagement.Domain.Services
             if (request == null) throw new ArgumentNullException(nameof(request));
 
             var user = await _userRepository.GetUserByIdAsync(request.Id) ?? throw new InvalidOperationException("User does not exist!");
-            if (!user.Password.VerifyPassword(request.OldPassword, user.Id))
-            {
-                throw new Exception("Old password is incorrect.");
-            }
+            // Sử dụng UserManager để thay đổi mật khẩu
+            var result = await _userManager.ChangePasswordAsync(user, request.OldPassword, request.NewPassword);
 
-            if (user.Password.VerifyPassword(request.NewPassword, user.Id))
+            if (!result.Succeeded)
             {
-                throw new Exception("New password is the same as Old password.");
+                throw new Exception("Password change failed: " + string.Join(", ", result.Errors.Select(e => e.Description)));
             }
 
             user.LastUpdatedAt = DateTime.UtcNow;
-            user.Password = request.NewPassword.HashPassword(user.Id);
             await _userRepository.UpdateUserAsync(user);
         }
 
@@ -64,7 +64,7 @@ namespace UserManagement.Domain.Services
 
             if (!string.IsNullOrEmpty(request.SearchQuery))
             {
-                query = query.Where(u => EF.Functions.Like(u.Username, $"%{request.SearchQuery}%")
+                query = query.Where(u => EF.Functions.Like(u.UserName, $"%{request.SearchQuery}%")
                                     || EF.Functions.Like(u.Fullname, $"%{request.SearchQuery}%")
                                     || EF.Functions.Like(u.PhoneNumber, $"%{request.SearchQuery}%")
                                     || EF.Functions.Like(u.Email, $"%{request.SearchQuery}%")
@@ -89,10 +89,9 @@ namespace UserManagement.Domain.Services
             if (request == null) throw new ArgumentNullException(nameof(request));
 
             var user = await _userRepository.GetUserByUsernameAsync(request.UserName) ?? throw new InvalidOperationException("User does not exist!");
-            if (!user.Password.VerifyPassword(request.Password, user.Id))
-            {
-                throw new Exception("User password is incorrect.");
-            }
+
+            var result = await _userManager.CheckPasswordAsync(user, request.Password);
+            if (!result) throw new Exception("User password is incorrect.");
 
             return _mapper.Map<UserResponse>(user);
         }
@@ -103,7 +102,7 @@ namespace UserManagement.Domain.Services
 
             var userExisted = _userRepository.GetAllUsers()
                                 .FirstOrDefault(x =>
-                                    x.Username == request.Username ||
+                                    x.UserName == request.Username ||
                                     x.PhoneNumber == request.PhoneNumber ||
                                     x.Email == request.Email
             );
@@ -113,16 +112,20 @@ namespace UserManagement.Domain.Services
             var user = new User
             {
                 Id = userId,
-                Username = request.Username,
+                UserName = request.Username,
                 Email = request.Email,
-                Password = PasswordExtension.HashPassword(request.Password, userId),
                 CreatedAt = DateTime.UtcNow,
                 LastUpdatedAt = DateTime.UtcNow,
                 Fullname = request.Fullname,
                 PhoneNumber = request.PhoneNumber,
             };
 
-            await _userRepository.AddUserAsync(user);
+            var result = await _userManager.CreateAsync(user, request.Password);
+
+            if (!result.Succeeded)
+            {
+                throw new Exception("User registration failed: " + string.Join(", ", result.Errors.Select(e => e.Description)));
+            }
 
             return _mapper.Map<UserResponse>(user);
         }
