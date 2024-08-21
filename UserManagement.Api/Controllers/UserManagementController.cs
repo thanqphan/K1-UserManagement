@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using System.Net;
 using UserManagement.Core.Services;
 using UserManagement.Core.ViewModels.Requests.User;
@@ -44,6 +45,7 @@ namespace UserManagement.Api.Controllers
         }
 
         [HttpPatch("edit")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Edit([FromBody] UserUpdateRequest request)
         {
             try
@@ -72,6 +74,7 @@ namespace UserManagement.Api.Controllers
         }
 
         [HttpDelete("delete/{id}")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Delete([FromRoute] string id)
         {
             try
@@ -86,6 +89,7 @@ namespace UserManagement.Api.Controllers
         }
 
         [HttpGet]
+        [Authorize]
         public async Task<IActionResult> GetAll([FromQuery] UserGetAllRequest request)
         {
             try
